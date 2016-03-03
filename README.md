@@ -1,4 +1,8 @@
+
 # Introduction
+
+[![license](http://img.shields.io/badge/license-MIT-red.svg?style=flat)](https://raw.githubusercontent.com/123hurray/tlslog/master/LICENSE)
+![travis-ci](https://api.travis-ci.org/123hurray/Netroxy.svg)
 
 Netroxy is a TCP proxy that can be used to access LAN services from any other LAN, for example "Remote Desktop service".
 
