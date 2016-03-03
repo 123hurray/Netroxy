@@ -1,0 +1,10 @@
+{
+	"ip" : "127.0.0.1",
+	"port": 10000,
+	"username": "test",
+	"password": "test",
+    "connections": [
+        {"ip": "127.0.0.1", "port": 3389, "remotePort": 10002},
+        {"ip": "127.0.0.1", "port": 21, "remotePort": 10004}
+    ]
+}
