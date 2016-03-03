@@ -22,47 +22,21 @@
  * SOFTWARE.
  */
 
-package server
+package client
 
 import (
-	"io"
-	"net"
-
-	"github.com/123hurray/netroxy/utils/logger"
+	"strconv"
 )
 
-type ProxyHandler struct {
-	mainConn net.Conn
-	connChan chan net.Conn
-	portStr  string
+type Mapping struct {
+	Ip   string
+	Port int
 }
 
-func NewProxyHandler(mainConn net.Conn, portStr string) *ProxyHandler {
-	self := new(ProxyHandler)
-	self.connChan = make(chan net.Conn)
-	self.mainConn = mainConn
-	self.portStr = portStr
-	return self
+func NewMapping(ip string, port int) *Mapping {
+	return &Mapping{ip, port}
 }
 
-func (self *ProxyHandler) Handle(conn net.Conn) {
-	logger.Info("New user request", conn.LocalAddr(), "from", conn.RemoteAddr())
-	self.mainConn.Write([]byte("TRQ\n" + self.portStr + "\n"))
-	conn1 := <-self.connChan
-
-	logger.Info("Forwarding tcp connection...")
-	go func() {
-		io.Copy(conn, conn1)
-		conn.Close()
-		logger.Info("Proxy connection1 closed.")
-	}()
-
-	io.Copy(conn1, conn)
-	conn1.Close()
-	logger.Info("Proxy connection2 closed.")
-
-}
-
-func Serve() {
-
+func (self *Mapping) Addr() string {
+	return self.Ip + ":" + strconv.Itoa(self.Port)
 }
