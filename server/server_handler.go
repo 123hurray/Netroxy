@@ -28,6 +28,7 @@ import (
 	"bufio"
 	"net"
 	"strconv"
+	"time"
 
 	"github.com/123hurray/netroxy/utils/logger"
 
@@ -39,17 +40,27 @@ const defaultBufferSize = 16 * 1024
 type Handler struct {
 	portHandlerDict   map[int]*ProxyHandler
 	portTcpServerDict map[int]*network.Server
-	username          string
+	config            *ServerConfig
 	password          string
+	clients           map[net.Conn]*ClientConn
 }
 
-func NewHandler(username string, password string) *Handler {
+func NewHandler(config *ServerConfig) *Handler {
 	handler := new(Handler)
 	handler.portHandlerDict = make(map[int]*ProxyHandler)
 	handler.portTcpServerDict = make(map[int]*network.Server)
-	handler.username = username
-	handler.password = password
+	handler.clients = make(map[net.Conn]*ClientConn)
+	handler.config = config
 	return handler
+}
+
+func (self *Handler) Supervise() {
+	now := time.Now()
+	for conn, cli := range self.clients {
+		if now.Sub(cli.expireTime) > time.Duration(0) {
+			conn.Close()
+		}
+	}
 }
 
 func (self *Handler) Handle(conn net.Conn) {
@@ -59,6 +70,8 @@ func (self *Handler) Handle(conn net.Conn) {
 		if !freeFlag {
 			return
 		}
+		delete(self.clients, conn)
+
 		conn.Close()
 		for _, s := range self.portTcpServerDict {
 			s.Close()
@@ -87,14 +100,18 @@ func (self *Handler) Handle(conn net.Conn) {
 				logger.Warn("Parameters error, receive ", line, ". Error:", err)
 				return
 			}
-			if username == self.username && password == self.password {
-				conn.Write([]byte("ARS\ntrue\n"))
+			if username == self.config.Username && password == self.config.Password {
+				self.clients[conn] = NewClientConn(conn, self.config.Timeout)
+				conn.Write([]byte("ARS\ntrue\n" + strconv.Itoa(self.config.Timeout) + "\n"))
 				logger.Debug("Auth OK.")
 			} else {
 				conn.Write([]byte("ARS\nfalse\n"))
 				logger.Warn("Auth failed. Username or password error.")
 				return
 			}
+		case line == "SRQ":
+			self.clients[conn].UpdateExpireTime()
+			conn.Write([]byte("SRS\n"))
 		case line == "MAP":
 			line, err = reader.ReadString('\n')
 			if err != nil {

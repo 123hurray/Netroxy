@@ -30,6 +30,8 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"sync/atomic"
+	"time"
 
 	"github.com/123hurray/netroxy/utils/logger"
 )
@@ -37,12 +39,14 @@ import (
 const defaultBufferSize = 16 * 1024
 
 type Client struct {
-	conn     net.Conn
-	targets  map[int]*Mapping
-	reader   *bufio.Reader
-	ip       string
-	port     int
-	exitChan chan bool
+	conn       net.Conn
+	targets    map[int]*Mapping
+	reader     *bufio.Reader
+	ip         string
+	port       int
+	exitChan   chan bool
+	expireTime int32
+	timeout    int
 }
 
 func NewClient(ip string, port int) *Client {
@@ -51,6 +55,7 @@ func NewClient(ip string, port int) *Client {
 	client.port = port
 	client.targets = make(map[int]*Mapping)
 	client.exitChan = make(chan bool)
+	client.expireTime = 0
 	return client
 }
 
@@ -79,16 +84,52 @@ func (self *Client) Login(username string, password string) error {
 		return err
 	}
 	if isOK == "true\n" {
+		timeoutStr, err := self.reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		timeoutStr = timeoutStr[:len(timeoutStr)-1]
+		timeout, err := strconv.Atoi(timeoutStr)
+		if err != nil {
+			logger.Warn("Illegal parameter, expected timeout but receive", timeoutStr)
+			return err
+		}
+		self.timeout = timeout
+		logger.Debug("Timeout:", timeout)
 		logger.Info("Login to server success.")
+		go self.supervise()
 		go self.handle()
 		return nil
 	} else {
 		return errors.New("Auth failed")
 	}
 }
+
+func (self *Client) supervise() {
+	ticker := time.NewTicker(time.Duration(self.timeout) * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			if atomic.AddInt32(&self.expireTime, 1) == 3 {
+				self.Close()
+			} else {
+				self.send("SRQ\n")
+			}
+		}
+	}
+	<-self.exitChan
+	logger.Info("Supervise stop.")
+}
+
+func (self *Client) Close() {
+	err := self.conn.Close()
+	if err != nil {
+		close(self.exitChan)
+	}
+}
+
 func (self *Client) handle() {
-	defer self.conn.Close()
-	defer close(self.exitChan)
+	defer self.Close()
 	for {
 		line, err := self.reader.ReadString('\n')
 		if err != nil {
@@ -96,6 +137,8 @@ func (self *Client) handle() {
 		}
 		line = line[:len(line)-1]
 		switch {
+		case line == "SRS":
+			atomic.StoreInt32(&self.expireTime, 0)
 		case line == "MRS":
 			line, err = self.reader.ReadString('\n')
 			line = line[:len(line)-1]

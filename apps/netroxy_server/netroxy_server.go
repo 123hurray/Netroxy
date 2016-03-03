@@ -25,6 +25,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/123hurray/netroxy/config"
 	"github.com/123hurray/netroxy/server"
 	"github.com/123hurray/netroxy/utils/logger"
@@ -39,6 +41,16 @@ func main() {
 		logger.Fatal(err)
 	}
 	s, err := network.NewTcpServer("Netroxy_main", conf.Ip, conf.Port)
-	handler := server.NewHandler(conf.Username, conf.Password)
+	handler := server.NewHandler(conf)
+	go func() {
+		ticker := time.NewTicker(time.Duration(conf.Timeout/3) * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				logger.Debug("Supervise")
+				handler.Supervise()
+			}
+		}
+	}()
 	s.Serve(handler)
 }

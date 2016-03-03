@@ -29,4 +29,5 @@ type ServerConfig struct {
 	Port     int    `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
+	Timeout  int    `json:"timeout"`
 }

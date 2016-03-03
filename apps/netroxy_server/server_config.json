@@ -2,5 +2,6 @@
 	"ip" : "127.0.0.1",
 	"port": 10000,
 	"username": "test",
-	"password": "test"
+	"password": "test",
+    "timeout": 100
 }
