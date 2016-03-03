@@ -47,7 +47,6 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				logger.Debug("Supervise")
 				handler.Supervise()
 			}
 		}

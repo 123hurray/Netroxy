@@ -53,6 +53,7 @@ When user connects to server's port(PortC), server sends a request to associated
 2. Client connection:
 
     IpD:PortD (Auth)-> IpA:PortA
+	
     IpA:PortA (Auth OK)-> IpD:PortD
     
 3. Mapping request:
@@ -62,6 +63,7 @@ When user connects to server's port(PortC), server sends a request to associated
 4. Mapping response:
     
     Listen on IpA:PortC
+	
     IpA:PortA (Mapping OK)-> IPD:PortD
 
 5. User request:
@@ -75,14 +77,17 @@ When user connects to server's port(PortC), server sends a request to associated
 7. Tunnel response:
 
     IpD:PortF <-> IpB:PortB
+	
     IpD:PortG (tunnel response, IpB:PortB)-> IpA:PortA
     
 8. Tunnel established:
 
     IO Copy: from (IpE:PortE <-> IpA:PortC) to (IpA:PortA <-> IpD:PortG)
+	
     IO Copy: from (IpA:PortA <-> IpD:PortG) to (IpE:PortE <-> IpA:PortC)
     
     IO Copy: from (IpD:PortG <-> IpA:PortA) to (IpD:PortF <-> IpB:PortB)
+	
     IO Copy: from (IpD:PortF <-> IpB:PortB) to (IpD:PortG <-> IpA:PortA)
     
 9. User accesses service:
@@ -136,6 +141,18 @@ Tunnel response
 
     TRS\n
     port\n   
+
+### SRQ
+
+Keepalive request from client
+
+	SRQ\n
+
+### SRS
+
+Keepalive response from server
+
+	SRS\n
 
 # TODO
 
