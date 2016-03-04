@@ -26,9 +26,12 @@ package server
 
 import (
 	"bufio"
+	"errors"
 	"net"
 	"strconv"
 	"time"
+
+	"github.com/123hurray/netroxy/common"
 
 	"github.com/123hurray/netroxy/utils/logger"
 
@@ -43,6 +46,7 @@ type Handler struct {
 	config            *ServerConfig
 	password          string
 	clients           map[net.Conn]*ClientConn
+	reader            *bufio.Reader
 }
 
 func NewHandler(config *ServerConfig) *Handler {
@@ -63,8 +67,40 @@ func (self *Handler) Supervise() {
 	}
 }
 
+func (self *Handler) getString() (str string, err error) {
+	str, err = self.reader.ReadString('\n')
+	str = str[:len(str)-1]
+	return
+}
+func (self *Handler) getInt() (i int, err error) {
+	str, err := self.getString()
+	if err != nil {
+		return
+	}
+	i, err = strconv.Atoi(str)
+	if err != nil {
+		return
+	}
+	return
+}
+func (self *Handler) getBool() (b bool, err error) {
+	str, err := self.getString()
+	if err != nil {
+		return
+	}
+	if str == "true" {
+		b = true
+	} else if str == "false" {
+		b = false
+	} else {
+		err = errors.New("Illegal bool value. Receive:" + str)
+	}
+	return
+}
+
 func (self *Handler) Handle(conn net.Conn) {
 	reader := bufio.NewReaderSize(conn, defaultBufferSize)
+	self.reader = reader
 	freeFlag := true
 	defer func() {
 		if !freeFlag {
@@ -88,20 +124,23 @@ func (self *Handler) Handle(conn net.Conn) {
 		logger.Debug(line)
 		switch {
 		case line == "ATH":
-			username, err := reader.ReadString('\n')
-			username = username[:len(username)-1]
+			name, err := self.getString()
 			if err != nil {
-				logger.Warn("Parameters error, receive ", line, ". Error:", err)
+				logger.Warn("Parameters error, receive ", name, ". Error:", err)
 				return
 			}
-			password, err := reader.ReadString('\n')
-			password = password[:len(password)-1]
+			username, err := self.getString()
 			if err != nil {
-				logger.Warn("Parameters error, receive ", line, ". Error:", err)
+				logger.Warn("Parameters error, receive ", username, ". Error:", err)
+				return
+			}
+			password, err := self.getString()
+			if err != nil {
+				logger.Warn("Parameters error, receive ", password, ". Error:", err)
 				return
 			}
 			if username == self.config.Username && password == self.config.Password {
-				self.clients[conn] = NewClientConn(conn, self.config.Timeout)
+				self.clients[conn] = NewClientConn(conn, name, self.config.Timeout)
 				conn.Write([]byte("ARS\ntrue\n" + strconv.Itoa(self.config.Timeout) + "\n"))
 				logger.Debug("Auth OK.")
 			} else {
@@ -113,15 +152,19 @@ func (self *Handler) Handle(conn net.Conn) {
 			self.clients[conn].UpdateExpireTime()
 			conn.Write([]byte("SRS\n"))
 		case line == "MAP":
-			line, err = reader.ReadString('\n')
+			port, err := self.getInt()
 			if err != nil {
-				logger.Warn("Parameters error, receive ", line, ". Error:", err)
+				logger.Warn("Parameters error:", err)
 				return
 			}
-			line = line[:len(line)-1]
-			port, err := strconv.Atoi(line)
+			mapAddress, err := self.getString()
 			if err != nil {
-				logger.Warn("Parameters error, receive ", line, ". Error:", err)
+				logger.Warn("Parameters error:", err)
+				return
+			}
+			isOpen, err := self.getBool()
+			if err != nil {
+				logger.Warn("Parameters error:", err)
 				return
 			}
 			s, err := network.NewTcpServer("Netroxy_"+strconv.Itoa(port), "0.0.0.0", port)
@@ -130,12 +173,15 @@ func (self *Handler) Handle(conn net.Conn) {
 				// TODO tell client
 				return
 			}
-			handlerProxy := NewProxyHandler(conn, line)
+			cliHost, cliPortStr, _ := net.SplitHostPort(mapAddress)
+			cliPort, _ := strconv.Atoi(cliPortStr)
+			mapping := common.NewMapping(cliHost, cliPort, port, isOpen)
+			handlerProxy := NewProxyHandler(conn, mapping)
 			self.portHandlerDict[port] = handlerProxy
 			self.portTcpServerDict[port] = s
 			go s.Serve(handlerProxy)
-			logger.Info("New connection " + line + " prepared.")
-			conn.Write([]byte("MRS\n" + line + "\n"))
+			logger.Info("New connection " + strconv.Itoa(port) + " prepared.")
+			conn.Write([]byte("MRS\n" + strconv.Itoa(port) + "\n"))
 
 		case line == "TRS":
 			line, err = reader.ReadString('\n')

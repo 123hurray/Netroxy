@@ -22,21 +22,29 @@
  * SOFTWARE.
  */
 
-package client
+package common
 
 import (
 	"strconv"
 )
 
 type Mapping struct {
-	Ip   string
-	Port int
+	Ip         string
+	Port       int
+	RemotePort int
+	IsOpen     bool
 }
 
-func NewMapping(ip string, port int) *Mapping {
-	return &Mapping{ip, port}
+func NewMapping(ip string, port int, remotePort int, isOpen bool) *Mapping {
+	return &Mapping{ip, port, remotePort, isOpen}
 }
 
 func (self *Mapping) Addr() string {
 	return self.Ip + ":" + strconv.Itoa(self.Port)
+}
+func (self *Mapping) Enabled() {
+	self.IsOpen = true
+}
+func (self *Mapping) Disabled() {
+	self.IsOpen = true
 }

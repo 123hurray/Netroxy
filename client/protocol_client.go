@@ -22,35 +22,23 @@
  * SOFTWARE.
  */
 
-package main
+package client
 
 import (
-	"time"
-
-	"github.com/123hurray/netroxy/client"
-	"github.com/123hurray/netroxy/config"
-	"github.com/123hurray/netroxy/utils/logger"
+	"fmt"
+	"net"
+	"strconv"
 )
 
-func main() {
-	logger.Start(logger.LOG_LEVEL_DEBUG, "")
-	conf := new(client.ClientConfig)
-	err := config.Parse("client_config.json", conf)
-	if err != nil {
-		logger.Fatal(err)
-	}
-	for {
-		cli := client.NewClient(conf.Ip, conf.Port)
-		err = cli.Login(conf.Username, conf.Password)
-		if err != nil {
-			logger.Warn("Failed to connect server.", err)
-			time.Sleep(3 * time.Second)
-			continue
-		}
-		for _, i := range conf.Connections {
-			cli.Connect(&i)
-		}
-		cli.Wait()
-		logger.Warn("Connection to server closed. Reconnecting...")
-	}
+func (self *Client) auth(cliName string, username string, password string) {
+	self.send("ATH\n" + cliName + "\n" + username + "\n" + password + "\n")
+}
+func (self *Client) superviseRequest() {
+	self.send("SRQ\n")
+}
+func (self *Client) channelResponse(conn net.Conn, port string) {
+	conn.Write([]byte("TRS\n" + port + "\n"))
+}
+func (self *Client) mapRequest(remotePort int, address string, isOpen bool) {
+	self.send("MAP\n" + strconv.Itoa(remotePort) + "\n" + address + "\n" + fmt.Sprintf("%t\n", isOpen))
 }

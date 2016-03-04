@@ -7,3 +7,5 @@ go:
 install:
   - go get github.com/123hurray/netroxy/apps/netroxy_server
   - go get github.com/123hurray/netroxy/apps/netroxy_client
+notifications:
+  email: false

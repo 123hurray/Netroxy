@@ -27,27 +27,35 @@ package server
 import (
 	"io"
 	"net"
+	"strconv"
 
+	"github.com/123hurray/netroxy/common"
 	"github.com/123hurray/netroxy/utils/logger"
 )
 
 type ProxyHandler struct {
 	mainConn net.Conn
 	connChan chan net.Conn
-	portStr  string
+	mapping  *common.Mapping
 }
 
-func NewProxyHandler(mainConn net.Conn, portStr string) *ProxyHandler {
+func NewProxyHandler(mainConn net.Conn, mapping *common.Mapping) *ProxyHandler {
 	self := new(ProxyHandler)
 	self.connChan = make(chan net.Conn)
 	self.mainConn = mainConn
-	self.portStr = portStr
+	self.mapping = mapping
 	return self
 }
 
 func (self *ProxyHandler) Handle(conn net.Conn) {
 	logger.Info("New user request", conn.LocalAddr(), "from", conn.RemoteAddr())
-	self.mainConn.Write([]byte("TRQ\n" + self.portStr + "\n"))
+	if self.mapping.IsOpen == false {
+		logger.Info("Reject connection.")
+		conn.Close()
+		return
+	}
+
+	self.mainConn.Write([]byte("TRQ\n" + strconv.Itoa(self.mapping.RemotePort) + "\n"))
 	conn1 := <-self.connChan
 
 	logger.Info("Forwarding tcp connection...")

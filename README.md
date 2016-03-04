@@ -2,7 +2,7 @@
 # Introduction
 
 [![license](http://img.shields.io/badge/license-MIT-red.svg?style=flat)](https://raw.githubusercontent.com/123hurray/tlslog/master/LICENSE)
-![travis-ci](https://api.travis-ci.org/123hurray/Netroxy.svg)
+[![travis-ci](https://api.travis-ci.org/123hurray/Netroxy.svg)](https://travis-ci.org/123hurray/Netroxy)
 
 Netroxy is a TCP proxy that can be used to access LAN services from any other LAN, for example "Remote Desktop service".
 
@@ -98,7 +98,7 @@ When user connects to server's port(PortC), server sends a request to associated
 
     IpE:PortE <-> IpA:PortC <-> IpD:PortG <-> IpB:PortB
     
-# Protocol
+# Protocol v0.2
 
 ## Commands
 
@@ -107,6 +107,7 @@ When user connects to server's port(PortC), server sends a request to associated
 Connect and auth to server
 
     ATH\n
+	clientName\n
     username\n
     password\n
     
@@ -123,6 +124,9 @@ Map a local tcp address to server port
 
     MAP\n
     port\n
+	address\n
+	isOpen(true or false)\n
+	
     
 ### MRS
 

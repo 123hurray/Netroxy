@@ -28,11 +28,14 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"math/rand"
 	"net"
+	"os"
 	"strconv"
 	"sync/atomic"
 	"time"
 
+	"github.com/123hurray/netroxy/common"
 	"github.com/123hurray/netroxy/utils/logger"
 )
 
@@ -40,22 +43,28 @@ const defaultBufferSize = 16 * 1024
 
 type Client struct {
 	conn       net.Conn
-	targets    map[int]*Mapping
+	targets    map[int]*common.Mapping
 	reader     *bufio.Reader
 	ip         string
 	port       int
 	exitChan   chan bool
 	expireTime int32
 	timeout    int
+	name       string
 }
 
 func NewClient(ip string, port int) *Client {
 	client := new(Client)
 	client.ip = ip
 	client.port = port
-	client.targets = make(map[int]*Mapping)
+	client.targets = make(map[int]*common.Mapping)
 	client.exitChan = make(chan bool)
 	client.expireTime = 0
+	name, err := os.Hostname()
+	if err != nil {
+		logger.Fatal("Cannot get Hostname.")
+	}
+	client.name = name + "-" + strconv.Itoa(rand.Int())
 	return client
 }
 
@@ -69,7 +78,7 @@ func (self *Client) Login(username string, password string) error {
 		return err
 	}
 	self.conn = conn
-	self.send("ATH\n" + username + "\n" + password + "\n")
+	self.auth(self.name, username, password)
 	self.reader = bufio.NewReaderSize(conn, defaultBufferSize)
 	ars, err := self.reader.ReadString('\n')
 	if err != nil {
@@ -113,7 +122,7 @@ func (self *Client) supervise() {
 			if atomic.AddInt32(&self.expireTime, 1) == 3 {
 				self.Close()
 			} else {
-				self.send("SRQ\n")
+				self.superviseRequest()
 			}
 		}
 	}
@@ -174,7 +183,7 @@ func (self *Client) handle() {
 					logger.Warn("Cannot connect to", t.Addr(), err)
 					break
 				}
-				conn1.Write([]byte("TRS\n" + line + "\n"))
+				self.channelResponse(conn1, line)
 				logger.Info("Dial " + t.Addr() + " OK")
 				logger.Info("New tunnel", self.ip+":"+strconv.Itoa(remotePort), "<->", t.Addr(), "created.")
 				go func() {
@@ -195,11 +204,11 @@ func (self *Client) handle() {
 func (self *Client) Wait() {
 	<-self.exitChan
 }
-func (self *Client) Connect(ip string, port int, remotePort int) (*Mapping, error) {
-	addr := ip + ":" + strconv.Itoa(port)
-	t := NewMapping(ip, port)
+func (self *Client) Connect(mapConfig *ConnectionConfig) (*common.Mapping, error) {
+	addr := mapConfig.Ip + ":" + strconv.Itoa(mapConfig.Port)
+	t := common.NewMapping(mapConfig.Ip, mapConfig.Port, mapConfig.RemotePort, mapConfig.IsOpen)
 	logger.Info("Send new mapping", addr, ":", t.Addr(), "request...")
-	self.send("MAP\n" + strconv.Itoa(remotePort) + "\n")
-	self.targets[remotePort] = t
+	self.mapRequest(mapConfig.RemotePort, addr, mapConfig.IsOpen)
+	self.targets[mapConfig.RemotePort] = t
 	return t, nil
 }
