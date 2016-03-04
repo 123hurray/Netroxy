@@ -98,7 +98,7 @@ When user connects to server's port(PortC), server sends a request to associated
 
     IpE:PortE <-> IpA:PortC <-> IpD:PortG <-> IpB:PortB
     
-# Protocol v0.2
+# Protocol v0.3
 
 ## Commands
 
@@ -117,6 +117,8 @@ Auth response
 
     ARS\n
     isOK(true or false)\n
+	timeout(Present if isOk is true)\n
+	token(Present if isOk is true)\n
     
 ### MAP
 
@@ -145,9 +147,11 @@ Tunnel request
     
 ### TRS
 
-Tunnel response
+Tunnel response.Tunnel response is send from a new
+tcp socket. So it has to use token to tell server who it is.
 
     TRS\n
+	token\n
     port\n   
 
 ### SRQ

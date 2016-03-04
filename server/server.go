@@ -26,7 +26,6 @@ package server
 
 import (
 	"bufio"
-	"errors"
 	"net"
 	"strconv"
 	"time"
@@ -34,135 +33,122 @@ import (
 	"github.com/123hurray/netroxy/common"
 
 	"github.com/123hurray/netroxy/utils/logger"
+	"github.com/123hurray/netroxy/utils/security"
 
 	"github.com/123hurray/netroxy/utils/network"
 )
 
 const defaultBufferSize = 16 * 1024
 
-type Handler struct {
-	portHandlerDict   map[int]*ProxyHandler
-	portTcpServerDict map[int]*network.Server
-	config            *ServerConfig
-	password          string
-	clients           map[net.Conn]*ClientConn
-	reader            *bufio.Reader
+type Server struct {
+	config   *ServerConfig
+	password string
+	clients  map[string]*ClientConn
 }
 
-func NewHandler(config *ServerConfig) *Handler {
-	handler := new(Handler)
-	handler.portHandlerDict = make(map[int]*ProxyHandler)
-	handler.portTcpServerDict = make(map[int]*network.Server)
-	handler.clients = make(map[net.Conn]*ClientConn)
+func NewServer(config *ServerConfig) *Server {
+	handler := new(Server)
+	handler.clients = make(map[string]*ClientConn)
 	handler.config = config
 	return handler
 }
 
-func (self *Handler) Supervise() {
+func (self *Server) Supervise() {
 	now := time.Now()
-	for conn, cli := range self.clients {
+	for _, cli := range self.clients {
 		if now.Sub(cli.expireTime) > time.Duration(0) {
-			conn.Close()
+			cli.conn.Close()
 		}
 	}
 }
 
-func (self *Handler) getString() (str string, err error) {
-	str, err = self.reader.ReadString('\n')
-	str = str[:len(str)-1]
-	return
-}
-func (self *Handler) getInt() (i int, err error) {
-	str, err := self.getString()
-	if err != nil {
-		return
-	}
-	i, err = strconv.Atoi(str)
-	if err != nil {
-		return
-	}
-	return
-}
-func (self *Handler) getBool() (b bool, err error) {
-	str, err := self.getString()
-	if err != nil {
-		return
-	}
-	if str == "true" {
-		b = true
-	} else if str == "false" {
-		b = false
-	} else {
-		err = errors.New("Illegal bool value. Receive:" + str)
-	}
-	return
+type ClientReader struct {
+	common.ProtocolReader
 }
 
-func (self *Handler) Handle(conn net.Conn) {
-	reader := bufio.NewReaderSize(conn, defaultBufferSize)
-	self.reader = reader
+func (self *Server) Handle(conn net.Conn) {
+	clientReader := ClientReader{}
+	clientReader.SetReader(bufio.NewReaderSize(conn, defaultBufferSize))
 	freeFlag := true
+	var client *ClientConn
+	var token string
 	defer func() {
-		if !freeFlag {
+		if freeFlag == false {
 			return
 		}
-		delete(self.clients, conn)
-
 		conn.Close()
-		for _, s := range self.portTcpServerDict {
-			s.Close()
+		if token == "" {
+			return
 		}
+		delete(self.clients, token)
+		if client.handlers == nil {
+			return
+		}
+		for i, _ := range client.handlers {
+			client.GetHandler(i).Free()
+		}
+		client.handlers = nil
 		logger.Info("Ports closed.")
 	}()
 	for {
-		line, err := reader.ReadString('\n')
+		line, err := clientReader.GetString()
 		if err != nil {
-			logger.Warn("Connnection closed")
+			logger.Warn("Connnection closed.", err)
 			return
 		}
-		line = line[:len(line)-1]
 		logger.Debug(line)
 		switch {
 		case line == "ATH":
-			name, err := self.getString()
+			name, err := clientReader.GetString()
 			if err != nil {
 				logger.Warn("Parameters error, receive ", name, ". Error:", err)
 				return
 			}
-			username, err := self.getString()
+			username, err := clientReader.GetString()
 			if err != nil {
 				logger.Warn("Parameters error, receive ", username, ". Error:", err)
 				return
 			}
-			password, err := self.getString()
+			password, err := clientReader.GetString()
 			if err != nil {
 				logger.Warn("Parameters error, receive ", password, ". Error:", err)
 				return
 			}
 			if username == self.config.Username && password == self.config.Password {
-				self.clients[conn] = NewClientConn(conn, name, self.config.Timeout)
-				conn.Write([]byte("ARS\ntrue\n" + strconv.Itoa(self.config.Timeout) + "\n"))
-				logger.Debug("Auth OK.")
+				// Auth passed
+				token = security.GenerateUID(16)
+				client = NewClientConn(conn, name, token, self.config.Timeout)
+				self.clients[token] = client
+				conn.Write([]byte("ARS\ntrue\n" + strconv.Itoa(self.config.Timeout) + "\n" + token + "\n"))
+				logger.Debug("Client", name, "Auth OK.")
 			} else {
 				conn.Write([]byte("ARS\nfalse\n"))
 				logger.Warn("Auth failed. Username or password error.")
 				return
 			}
 		case line == "SRQ":
-			self.clients[conn].UpdateExpireTime()
+			if token == "" {
+				logger.Warn("Token not found.")
+				return
+			}
+			client.UpdateExpireTime()
 			conn.Write([]byte("SRS\n"))
 		case line == "MAP":
-			port, err := self.getInt()
+			if token == "" {
+				logger.Warn("Token not found.")
+				return
+			}
+			port, err := clientReader.GetInt()
 			if err != nil {
 				logger.Warn("Parameters error:", err)
 				return
 			}
-			mapAddress, err := self.getString()
+			mapAddress, err := clientReader.GetString()
 			if err != nil {
 				logger.Warn("Parameters error:", err)
 				return
 			}
-			isOpen, err := self.getBool()
+			isOpen, err := clientReader.GetBool()
 			if err != nil {
 				logger.Warn("Parameters error:", err)
 				return
@@ -170,38 +156,42 @@ func (self *Handler) Handle(conn net.Conn) {
 			s, err := network.NewTcpServer("Netroxy_"+strconv.Itoa(port), "0.0.0.0", port)
 			if err != nil {
 				logger.Warn("Cannot Listen", port, ". Error:", err)
-				// TODO tell client
-				return
+				conn.Write([]byte("MRS\n" + strconv.Itoa(port) + "\nfalse\n"))
+				break
 			}
 			cliHost, cliPortStr, _ := net.SplitHostPort(mapAddress)
 			cliPort, _ := strconv.Atoi(cliPortStr)
 			mapping := common.NewMapping(cliHost, cliPort, port, isOpen)
-			handlerProxy := NewProxyHandler(conn, mapping)
-			self.portHandlerDict[port] = handlerProxy
-			self.portTcpServerDict[port] = s
+			handlerProxy := NewProxyHandler(conn, s, mapping)
+			client.AddHandler(handlerProxy)
 			go s.Serve(handlerProxy)
 			logger.Info("New connection " + strconv.Itoa(port) + " prepared.")
-			conn.Write([]byte("MRS\n" + strconv.Itoa(port) + "\n"))
+			conn.Write([]byte("MRS\n" + strconv.Itoa(port) + "\ntrue\n"))
 
 		case line == "TRS":
-			line, err = reader.ReadString('\n')
+			newToken, err := clientReader.GetString()
 			if err != nil {
 				logger.Warn("Illegal argument.", err)
 				return
 			}
-			line = line[:len(line)-1]
-			port, err := strconv.Atoi(line)
+			port, err := clientReader.GetInt()
 			if err != nil {
 				logger.Warn("Illegal argument.", err)
 				return
 			}
-			proxy := self.portHandlerDict[port]
+			client := self.clients[newToken]
+			if client == nil {
+				logger.Warn("Client not found.")
+				return
+			}
+			proxy := client.handlers[port]
 			if proxy == nil {
-				logger.Warn("Port", line, "not found.")
+				logger.Warn("Port", port, "not found.")
 				return
 			}
-			proxy.connChan <- conn
 			freeFlag = false
+			proxy.connChan <- conn
+			logger.Debug("Connection has been sent to proxy")
 			return
 		}
 

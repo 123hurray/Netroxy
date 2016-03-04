@@ -22,55 +22,52 @@
  * SOFTWARE.
  */
 
-package server
+package common
 
 import (
-	"io"
-	"net"
+	"bufio"
+	"errors"
 	"strconv"
-
-	"github.com/123hurray/netroxy/common"
-	"github.com/123hurray/netroxy/utils/logger"
-	"github.com/123hurray/netroxy/utils/network"
 )
 
-type ProxyHandler struct {
-	tcpServer *network.TCPServer
-	mainConn  net.Conn
-	connChan  chan net.Conn
-	mapping   *common.Mapping
+type ProtocolReader struct {
+	reader *bufio.Reader
 }
 
-func NewProxyHandler(mainConn net.Conn, tcpServer *network.TCPServer, mapping *common.Mapping) *ProxyHandler {
-	self := new(ProxyHandler)
-	self.connChan = make(chan net.Conn)
-	self.tcpServer = tcpServer
-	self.mainConn = mainConn
-	self.mapping = mapping
-	return self
+func (self *ProtocolReader) SetReader(reader *bufio.Reader) {
+	self.reader = reader
 }
 
-func (self *ProxyHandler) Handle(conn net.Conn) {
-	logger.Info("New user request", conn.LocalAddr(), "from", conn.RemoteAddr())
-	if self.mapping.IsOpen == false {
-		logger.Info("Reject connection.")
-		conn.Close()
+func (self *ProtocolReader) GetString() (str string, err error) {
+	str, err = self.reader.ReadString('\n')
+	if err != nil {
 		return
 	}
-
-	self.mainConn.Write([]byte("TRQ\n" + strconv.Itoa(self.mapping.RemotePort) + "\n"))
-	conn1 := <-self.connChan
-	logger.Info("Forwarding tcp data...")
-	go func() {
-		io.Copy(conn1, conn)
-		conn1.Close()
-		logger.Debug("Proxy conn1 closed.")
-	}()
-	io.Copy(conn, conn1)
-	conn.Close()
-	logger.Debug("Proxy conn2 closed.")
+	str = str[:len(str)-1]
+	return
 }
-
-func (self *ProxyHandler) Free() {
-	self.tcpServer.Close()
+func (self *ProtocolReader) GetInt() (i int, err error) {
+	str, err := self.GetString()
+	if err != nil {
+		return
+	}
+	i, err = strconv.Atoi(str)
+	if err != nil {
+		return
+	}
+	return
+}
+func (self *ProtocolReader) GetBool() (b bool, err error) {
+	str, err := self.GetString()
+	if err != nil {
+		return
+	}
+	if str == "true" {
+		b = true
+	} else if str == "false" {
+		b = false
+	} else {
+		err = errors.New("Illegal bool value. Receive:" + str)
+	}
+	return
 }

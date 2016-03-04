@@ -28,7 +28,6 @@ import (
 	"bufio"
 	"errors"
 	"io"
-	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -37,20 +36,22 @@ import (
 
 	"github.com/123hurray/netroxy/common"
 	"github.com/123hurray/netroxy/utils/logger"
+	"github.com/123hurray/netroxy/utils/security"
 )
 
 const defaultBufferSize = 16 * 1024
 
 type Client struct {
+	common.ProtocolReader
 	conn       net.Conn
 	targets    map[int]*common.Mapping
-	reader     *bufio.Reader
 	ip         string
 	port       int
 	exitChan   chan bool
 	expireTime int32
 	timeout    int
 	name       string
+	token      string
 }
 
 func NewClient(ip string, port int) *Client {
@@ -64,7 +65,7 @@ func NewClient(ip string, port int) *Client {
 	if err != nil {
 		logger.Fatal("Cannot get Hostname.")
 	}
-	client.name = name + "-" + strconv.Itoa(rand.Int())
+	client.name = name + "-" + security.GenerateUID(8)
 	return client
 }
 
@@ -78,33 +79,34 @@ func (self *Client) Login(username string, password string) error {
 		return err
 	}
 	self.conn = conn
+	logger.Debug("Client name:", self.name)
 	self.auth(self.name, username, password)
-	self.reader = bufio.NewReaderSize(conn, defaultBufferSize)
-	ars, err := self.reader.ReadString('\n')
+	self.SetReader(bufio.NewReaderSize(conn, defaultBufferSize))
+	ars, err := self.GetString()
 	if err != nil {
 		return err
 	}
-	if ars != "ARS\n" {
+	if ars != "ARS" {
 		logger.Warn("Illegal command, expected ARS but receive", ars)
 		return errors.New("Illegal command")
 	}
-	isOK, err := self.reader.ReadString('\n')
+	isOK, err := self.GetBool()
 	if err != nil {
 		return err
 	}
-	if isOK == "true\n" {
-		timeoutStr, err := self.reader.ReadString('\n')
+	if isOK == true {
+		timeout, err := self.GetInt()
 		if err != nil {
+			logger.Warn("Illegal parameter")
 			return err
 		}
-		timeoutStr = timeoutStr[:len(timeoutStr)-1]
-		timeout, err := strconv.Atoi(timeoutStr)
+		token, err := self.GetString()
 		if err != nil {
-			logger.Warn("Illegal parameter, expected timeout but receive", timeoutStr)
+			logger.Warn("Illegal parameter")
 			return err
 		}
 		self.timeout = timeout
-		logger.Debug("Timeout:", timeout)
+		self.token = token
 		logger.Info("Login to server success.")
 		go self.supervise()
 		go self.handle()
@@ -120,19 +122,25 @@ func (self *Client) supervise() {
 		select {
 		case <-ticker.C:
 			if atomic.AddInt32(&self.expireTime, 1) == 3 {
+				logger.Warn("Supervise failed.")
+				ticker.Stop()
 				self.Close()
+				return
 			} else {
 				self.superviseRequest()
 			}
+		case <-self.exitChan:
+			ticker.Stop()
+			logger.Info("Supervise stop.")
+			return
 		}
 	}
-	<-self.exitChan
-	logger.Info("Supervise stop.")
 }
 
 func (self *Client) Close() {
 	err := self.conn.Close()
-	if err != nil {
+	if err == nil {
+		logger.Debug("Close self.exitChan")
 		close(self.exitChan)
 	}
 }
@@ -140,35 +148,41 @@ func (self *Client) Close() {
 func (self *Client) handle() {
 	defer self.Close()
 	for {
-		line, err := self.reader.ReadString('\n')
+		command, err := self.GetString()
 		if err != nil {
+			logger.Warn("Connection closed.", err)
 			return
 		}
-		line = line[:len(line)-1]
 		switch {
-		case line == "SRS":
+		case command == "SRS":
 			atomic.StoreInt32(&self.expireTime, 0)
-		case line == "MRS":
-			line, err = self.reader.ReadString('\n')
-			line = line[:len(line)-1]
-			remotePort, err := strconv.Atoi(line)
+		case command == "MRS":
+			remotePort, err := self.GetInt()
 			if err != nil {
-				logger.Warn("Illegal parament, expected int but receive", line, err)
-				break
+				logger.Warn("Illegal parament.", err)
+				return
+			}
+			isOk, err := self.GetBool()
+			if err != nil {
+				logger.Warn("Illegal parament.", err)
+				return
 			}
 			t := self.targets[remotePort]
 			if t != nil {
-				logger.Info("Mapping", self.ip+":"+line, "<->", t.Addr(), "accepted.")
+
+				if isOk == false {
+					logger.Warn("Map", t.Addr(), "port failed.")
+					break
+				}
+				logger.Info("Mapping", self.conn.RemoteAddr(), "<->", t.Addr(), "accepted.")
 			}
-		case line == "TRQ":
+		case command == "TRQ":
 			logger.Info("Tunnel request.")
 			addr := self.ip + ":" + strconv.Itoa(self.port)
-			line, err = self.reader.ReadString('\n')
-			line = line[:len(line)-1]
-			remotePort, err := strconv.Atoi(line)
+			remotePort, err := self.GetInt()
 			if err != nil {
-				logger.Warn("Illegal parament, expected int but receive", line, err)
-				break
+				logger.Warn("Illegal parament.", err)
+				return
 			}
 			t := self.targets[remotePort]
 			if t != nil {
@@ -183,20 +197,23 @@ func (self *Client) handle() {
 					logger.Warn("Cannot connect to", t.Addr(), err)
 					break
 				}
-				self.channelResponse(conn1, line)
+				self.channelResponse(conn1, remotePort, self.token)
 				logger.Info("Dial " + t.Addr() + " OK")
 				logger.Info("New tunnel", self.ip+":"+strconv.Itoa(remotePort), "<->", t.Addr(), "created.")
 				go func() {
 					io.Copy(conn1, conn2)
+					logger.Debug("Proxy conn1 closed.")
 					defer conn1.Close()
 				}()
 				go func() {
 					io.Copy(conn2, conn1)
+					logger.Debug("Proxy conn2 closed.")
 					defer conn2.Close()
 				}()
 			}
 		default:
-			logger.Warn("Illegal command:", line)
+			logger.Warn("Illegal command:", command)
+			return
 		}
 	}
 }

@@ -36,8 +36,9 @@ func (self *Client) auth(cliName string, username string, password string) {
 func (self *Client) superviseRequest() {
 	self.send("SRQ\n")
 }
-func (self *Client) channelResponse(conn net.Conn, port string) {
-	conn.Write([]byte("TRS\n" + port + "\n"))
+func (self *Client) channelResponse(conn net.Conn, port int, token string) {
+	portStr := strconv.Itoa(port)
+	conn.Write([]byte("TRS\n" + token + "\n" + portStr + "\n"))
 }
 func (self *Client) mapRequest(remotePort int, address string, isOpen bool) {
 	self.send("MAP\n" + strconv.Itoa(remotePort) + "\n" + address + "\n" + fmt.Sprintf("%t\n", isOpen))

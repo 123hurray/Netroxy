@@ -41,15 +41,15 @@ func main() {
 		logger.Fatal(err)
 	}
 	s, err := network.NewTcpServer("Netroxy_main", conf.Ip, conf.Port)
-	handler := server.NewHandler(conf)
+	server := server.NewServer(conf)
 	go func() {
 		ticker := time.NewTicker(time.Duration(conf.Timeout/3) * time.Second)
 		for {
 			select {
 			case <-ticker.C:
-				handler.Supervise()
+				server.Supervise()
 			}
 		}
 	}()
-	s.Serve(handler)
+	s.Serve(server)
 }
