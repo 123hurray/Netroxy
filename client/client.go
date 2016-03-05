@@ -198,7 +198,13 @@ func (self *Client) handle() {
 			t := self.targets[remotePort]
 			if t != nil {
 				logger.Info("New tunnel", self.ip+":"+strconv.Itoa(remotePort), "<->", t.Addr(), "Establishing...")
-				conn1, err := net.Dial("tcp", addr)
+				var conn1 net.Conn
+				if self.config.TLS.Enabled == true {
+					tlsConfig := tls.Config{InsecureSkipVerify: !self.config.TLS.Verify}
+					conn1, err = tls.Dial("tcp", addr, &tlsConfig)
+				} else {
+					conn1, err = net.Dial("tcp", addr)
+				}
 				if err != nil {
 					logger.Warn("Cannot connect to", addr, err)
 					break
