@@ -1,10 +1,14 @@
 {
 	"ip" : "127.0.0.1",
-	"port": 10000,
+	"port": 10001,
+	"tls": {
+		"enabled" :true,
+		"verify": false
+	},
 	"username": "test",
 	"password": "test",
     "connections": [
-        {"ip": "127.0.0.1", "port": 3389, "remotePort": 10002, "isOpen": false},
-        {"ip": "127.0.0.1", "port": 21, "remotePort": 10004, "isOpen": false}
+        {"ip": "127.0.0.1", "port": 3389, "remotePort": 10003, "isOpen": false, "tls":true},
+        {"ip": "127.0.0.1", "port": 21, "remotePort": 10004, "isOpen": false, "tls":true}
     ]
 }

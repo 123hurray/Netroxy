@@ -168,12 +168,12 @@ Keepalive response from server
 
 # TODO
 
-1. Use SSL/TLS in client/server connection
-2. Use SSL/TLS in user/server connection
-3. Server/client can specify config file name
-4. Fix bug: One client disconnect from server will close all server ports
-5. Web interface to view all mapped ports
-6. User can send mapping requests
+ - [x] Use SSL/TLS in client/server connection
+ - [ ] Use SSL/TLS in user/server connection
+ - [ ] Server/client can specify config file name
+ - [x] Fix bug: One client disconnect from server will close all server ports
+ - [ ] Web interface to view all mapped ports
+ - [ ] User can send mapping requests
 
 # License
 

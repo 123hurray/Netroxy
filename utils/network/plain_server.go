@@ -22,23 +22,47 @@
  * SOFTWARE.
  */
 
-package client
+// A TCP server wrapper, implements Handler interface to handle client connections
+package network
 
-type ClientConfig struct {
-	Ip       string `json:"ip"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	TLS      struct {
-		Enabled bool `json:"enabled"`
-		Verify  bool `json:"verify"`
-	} `json:"tls"`
-	Connections []ConnectionConfig
+import (
+	"net"
+	"strconv"
+
+	"github.com/123hurray/netroxy/utils/logger"
+)
+
+type plainServer struct {
+	ip     string
+	port   int
+	name   string
+	socket *net.TCPListener
 }
-type ConnectionConfig struct {
-	Ip         string `json:"ip`
-	Port       int    `json:port`
-	RemotePort int    `json:remotePort`
-	TLS        bool   `json:"tls"`
-	IsOpen     bool   `json:"isOpen"`
+
+// return a new plain tcp(non TLS) server
+func NewPlainServer(name string, ip string, port int) (TCPServer, error) {
+	tcpAddr, err := net.ResolveTCPAddr("tcp4", ip+":"+strconv.Itoa(port))
+	l, err := net.ListenTCP("tcp", tcpAddr)
+	if err != nil {
+		return nil, err
+	}
+	server := plainServer{ip, port, name, l}
+	return &server, err
+}
+
+// Start plain server with a handler
+func (self *plainServer) Serve(handler Handler) {
+	logger.Info(self.name, "Listening", self.ip, ":", self.port)
+	for {
+		con, err := self.socket.Accept()
+		if err != nil {
+			return
+		}
+		go handler.Handle(con)
+	}
+}
+
+// Close TCP server
+func (self *plainServer) Close() {
+	self.socket.Close()
 }

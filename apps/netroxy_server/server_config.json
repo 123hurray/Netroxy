@@ -1,6 +1,12 @@
 {
 	"ip" : "127.0.0.1",
 	"port": 10000,
+	"tls": {
+		"enabled": true,
+		"port": 10001,
+		"ca": "ca.pem",
+		"key": "priv.key"
+	},
 	"username": "test",
 	"password": "test",
     "timeout": 100

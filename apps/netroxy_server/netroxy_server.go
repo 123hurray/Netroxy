@@ -25,6 +25,7 @@
 package main
 
 import (
+	"sync"
 	"time"
 
 	"github.com/123hurray/netroxy/config"
@@ -40,16 +41,43 @@ func main() {
 	if err != nil {
 		logger.Fatal(err)
 	}
-	s, err := network.NewTcpServer("Netroxy_main", conf.Ip, conf.Port)
-	server := server.NewServer(conf)
+	plainServer, err := network.NewPlainServer("Netroxy_main", conf.Ip, conf.Port)
+	if err != nil {
+		logger.Fatal(err)
+	}
+	plainNetroxyServer := server.NewServer(conf)
 	go func() {
 		ticker := time.NewTicker(time.Duration(conf.Timeout/3) * time.Second)
 		for {
 			select {
 			case <-ticker.C:
-				server.Supervise()
+				plainNetroxyServer.Supervise()
 			}
 		}
 	}()
-	s.Serve(server)
+	tlsServer, err := network.NewTLSServer("Netroxy_main_TLS", conf.Ip, conf.TLS.Port, conf.TLS.Ca, conf.TLS.Key)
+	if err != nil {
+		logger.Fatal(err)
+	}
+	tlsNetroxyServer := server.NewServer(conf)
+	go func() {
+		ticker := time.NewTicker(time.Duration(conf.Timeout/3) * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				tlsNetroxyServer.Supervise()
+			}
+		}
+	}()
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		tlsServer.Serve(tlsNetroxyServer)
+		wg.Done()
+	}()
+	go func() {
+		plainServer.Serve(plainNetroxyServer)
+		wg.Done()
+	}()
+	wg.Wait()
 }

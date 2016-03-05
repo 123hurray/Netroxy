@@ -26,6 +26,7 @@ package client
 
 import (
 	"bufio"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net"
@@ -47,6 +48,7 @@ type Client struct {
 	targets    map[int]*common.Mapping
 	ip         string
 	port       int
+	config     *ClientConfig
 	exitChan   chan bool
 	expireTime int32
 	timeout    int
@@ -54,10 +56,11 @@ type Client struct {
 	token      string
 }
 
-func NewClient(ip string, port int) *Client {
+func NewClient(config *ClientConfig) *Client {
 	client := new(Client)
-	client.ip = ip
-	client.port = port
+	client.ip = config.Ip
+	client.port = config.Port
+	client.config = config
 	client.targets = make(map[int]*common.Mapping)
 	client.exitChan = make(chan bool)
 	client.expireTime = 0
@@ -73,14 +76,22 @@ func (self *Client) send(content string) {
 	self.conn.Write([]byte(content))
 }
 
-func (self *Client) Login(username string, password string) error {
-	conn, err := net.Dial("tcp", self.ip+":"+strconv.Itoa(self.port))
+func (self *Client) Login() error {
+	var conn net.Conn
+	var err error
+	if self.config.TLS.Enabled == true {
+		tlsConfig := tls.Config{InsecureSkipVerify: !self.config.TLS.Verify}
+		logger.Debug("Using TLS.")
+		conn, err = tls.Dial("tcp", self.ip+":"+strconv.Itoa(self.port), &tlsConfig)
+	} else {
+		conn, err = net.Dial("tcp", self.ip+":"+strconv.Itoa(self.port))
+	}
 	if err != nil {
 		return err
 	}
 	self.conn = conn
 	logger.Debug("Client name:", self.name)
-	self.auth(self.name, username, password)
+	self.auth(self.name, self.config.Username, self.config.Password)
 	self.SetReader(bufio.NewReaderSize(conn, defaultBufferSize))
 	ars, err := self.GetString()
 	if err != nil {

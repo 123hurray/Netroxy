@@ -25,8 +25,14 @@
 package server
 
 type ServerConfig struct {
-	Ip       string `json:"ip"`
-	Port     int    `json:"port"`
+	Ip   string `json:"ip"`
+	Port int    `json:"port"`
+	TLS  struct {
+		Enabled bool   `json:"enabled"`
+		Port    int    `json:"port"`
+		Ca      string `json:"ca"`
+		Key     string `json:"key"`
+	} `json:"tls"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Timeout  int    `json:"timeout"`

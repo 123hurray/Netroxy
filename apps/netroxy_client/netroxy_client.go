@@ -40,8 +40,8 @@ func main() {
 		logger.Fatal(err)
 	}
 	for {
-		cli := client.NewClient(conf.Ip, conf.Port)
-		err = cli.Login(conf.Username, conf.Password)
+		cli := client.NewClient(conf)
+		err = cli.Login()
 		if err != nil {
 			logger.Warn("Failed to connect server.", err)
 			time.Sleep(3 * time.Second)

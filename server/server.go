@@ -41,9 +41,8 @@ import (
 const defaultBufferSize = 16 * 1024
 
 type Server struct {
-	config   *ServerConfig
-	password string
-	clients  map[string]*ClientConn
+	config  *ServerConfig
+	clients map[string]*ClientConn
 }
 
 func NewServer(config *ServerConfig) *Server {
@@ -153,7 +152,7 @@ func (self *Server) Handle(conn net.Conn) {
 				logger.Warn("Parameters error:", err)
 				return
 			}
-			s, err := network.NewTcpServer("Netroxy_"+strconv.Itoa(port), "0.0.0.0", port)
+			s, err := network.NewPlainServer("Netroxy_"+strconv.Itoa(port), "0.0.0.0", port)
 			if err != nil {
 				logger.Warn("Cannot Listen", port, ". Error:", err)
 				conn.Write([]byte("MRS\n" + strconv.Itoa(port) + "\nfalse\n"))

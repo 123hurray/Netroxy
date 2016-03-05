@@ -35,13 +35,13 @@ import (
 )
 
 type ProxyHandler struct {
-	tcpServer *network.TCPServer
+	tcpServer network.TCPServer
 	mainConn  net.Conn
 	connChan  chan net.Conn
 	mapping   *common.Mapping
 }
 
-func NewProxyHandler(mainConn net.Conn, tcpServer *network.TCPServer, mapping *common.Mapping) *ProxyHandler {
+func NewProxyHandler(mainConn net.Conn, tcpServer network.TCPServer, mapping *common.Mapping) *ProxyHandler {
 	self := new(ProxyHandler)
 	self.connChan = make(chan net.Conn)
 	self.tcpServer = tcpServer

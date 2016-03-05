@@ -87,7 +87,17 @@ func Error(v ...interface{}) {
 }
 func Fatal(v ...interface{}) {
 	if logLevel <= LOG_LEVEL_FATAL {
-		printf("FATAL", v...)
+		_, file, line, ok := runtime.Caller(1)
+		if ok == true {
+			_, fileName := filepath.Split(file)
+			msg := fmt.Sprintf("[FATAL][%s][%s:%d]:", time.Now().Format("15:04:05.000"), fileName, line)
+			msg += fmt.Sprintln(v)
+			fmt.Print(msg)
+			if logFd != nil {
+				logFd.WriteString(msg)
+			}
+			os.Exit(1)
+		}
 	}
 }
 func printf(level string, args ...interface{}) {
@@ -101,9 +111,6 @@ func printf(level string, args ...interface{}) {
 			fmt.Print(msg)
 			if logFd != nil {
 				logFd.WriteString(msg)
-			}
-			if level == "FATAL" {
-				os.Exit(1)
 			}
 		}
 	}
