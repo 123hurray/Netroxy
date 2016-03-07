@@ -22,59 +22,54 @@
  * SOFTWARE.
  */
 
-package server
+package web
 
 import (
-	"io"
-	"net"
+	"encoding/json"
+	"net/http"
 	"strconv"
-	"sync"
 
-	"github.com/123hurray/netroxy/common"
 	"github.com/123hurray/netroxy/utils/logger"
-	"github.com/123hurray/netroxy/utils/network"
 )
 
-type ProxyHandler struct {
-	tcpServer network.TCPServer
-	mainConn  net.Conn
-	connChan  chan net.Conn
-	mapping   *common.Mapping
-	lock      sync.RWMutex
+type MappingHandler struct {
+	webServer *NetroxyWebServer
 }
 
-func NewProxyHandler(mainConn net.Conn, tcpServer network.TCPServer, mapping *common.Mapping) *ProxyHandler {
-	self := new(ProxyHandler)
-	self.connChan = make(chan net.Conn)
-	self.tcpServer = tcpServer
-	self.mainConn = mainConn
-	self.mapping = mapping
-	return self
-}
-
-func (self *ProxyHandler) Handle(conn net.Conn) {
-	logger.Info("New user request", conn.LocalAddr(), "from", conn.RemoteAddr())
-	self.lock.RLock()
-	if self.mapping.IsOn() == false {
-		self.lock.RUnlock()
-		logger.Info("Reject connection.")
-		conn.Close()
+func (self MappingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	webServer := self.webServer
+	action := r.FormValue("action")
+	portStr := r.FormValue("port")
+	if portStr == "" || action == "" {
+		logger.Debug("WebPage:/mapping, illegal argument.")
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	self.lock.RUnlock()
-	self.mainConn.Write([]byte("TRQ\n" + strconv.Itoa(self.mapping.RemotePort) + "\n"))
-	conn1 := <-self.connChan
-	logger.Info("Forwarding tcp data...")
-	go func() {
-		io.Copy(conn1, conn)
-		conn1.Close()
-		logger.Debug("Proxy conn1 closed.")
-	}()
-	io.Copy(conn, conn1)
-	conn.Close()
-	logger.Debug("Proxy conn2 closed.")
-}
-
-func (self *ProxyHandler) Free() {
-	self.tcpServer.Close()
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		logger.Debug("WebPage:/mapping, illegal port.")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	webServer.lock.RLock()
+	defer webServer.lock.RUnlock()
+	for _, i := range webServer.serverModels {
+		if action == "on" {
+			ok := i.TurnMappingOn(port)
+			if ok {
+				j, _ := json.Marshal(true)
+				w.Write(j)
+				return
+			}
+		} else {
+			ok := i.TurnMappingOff(port)
+			if ok {
+				j, _ := json.Marshal(true)
+				w.Write(j)
+				return
+			}
+		}
+	}
+	j, _ := json.Marshal(false)
+	w.Write(j)
 }

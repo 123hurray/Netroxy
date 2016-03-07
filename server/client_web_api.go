@@ -25,53 +25,28 @@
 package server
 
 import (
-	"net"
-	"sync"
-	"time"
+	"github.com/123hurray/netroxy/web"
 )
 
-type ClientConn struct {
-	expireTime   time.Time
-	name         string
-	token        string
-	handlers     map[int]*ProxyHandler
-	conn         net.Conn
-	timeout      int
-	loginTime    string
-	handlersLock sync.RWMutex
-	clientLock   sync.RWMutex
+func (self *ClientConn) GetName() string {
+	return self.name
 }
 
-func NewClientConn(conn net.Conn, name string, token string, timeout int) *ClientConn {
-	cli := new(ClientConn)
-	cli.conn = conn
-	cli.name = name
-	cli.loginTime = time.Now().Format("01-02 15:04:05")
-	cli.token = token
-	cli.handlers = make(map[int]*ProxyHandler)
-	cli.timeout = timeout
-	cli.expireTime = time.Now().Add(time.Duration(timeout) * time.Second)
-	return cli
+func (self *ClientConn) GetLoginTime() string {
+	return self.loginTime
 }
 
-func (self *ClientConn) AddHandler(handler *ProxyHandler) {
-	self.handlersLock.Lock()
-	defer self.handlersLock.Unlock()
-	self.handlers[handler.mapping.RemotePort] = handler
-}
-
-func (self *ClientConn) RemoveHandler(key int) {
-	self.handlersLock.Lock()
-	defer self.handlersLock.Unlock()
-	delete(self.handlers, key)
-}
-
-func (self *ClientConn) GetHandler(key int) *ProxyHandler {
+func (self *ClientConn) GetMappingNumber() int {
 	self.handlersLock.RLock()
-	defer self.handlersLock.RLocker()
-	return self.handlers[key]
+	defer self.handlersLock.RUnlock()
+	return len(self.handlers)
 }
 
-func (self *ClientConn) UpdateExpireTime() {
-	self.expireTime = time.Now().Add(time.Duration(self.timeout) * time.Second)
+func (self *ClientConn) GetMappings() (mappings []web.MappingModel) {
+	self.handlersLock.RLock()
+	defer self.handlersLock.RUnlock()
+	for _, h := range self.handlers {
+		mappings = append(mappings, h)
+	}
+	return
 }

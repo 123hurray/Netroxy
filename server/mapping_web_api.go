@@ -22,46 +22,23 @@
  * SOFTWARE.
  */
 
-package common
+package server
 
-import (
-	"strconv"
-	"sync"
-)
-
-type Mapping struct {
-	Ip         string
-	Port       int
-	RemotePort int
-	isOn       bool
-	lock       sync.RWMutex
+func (self *ProxyHandler) GetAddr() string {
+	return self.mapping.Addr()
 }
 
-func NewMapping(ip string, port int, remotePort int, isOn bool) *Mapping {
-	mapping := Mapping{}
-	mapping.Ip = ip
-	mapping.Port = port
-	mapping.RemotePort = remotePort
-	mapping.isOn = isOn
-	return &mapping
+func (self *ProxyHandler) GetRemotePort() int {
+	return self.mapping.RemotePort
 }
-
-func (self *Mapping) Addr() string {
-	return self.Ip + ":" + strconv.Itoa(self.Port)
+func (self *ProxyHandler) IsOn() bool {
+	return self.mapping.IsOn()
 }
-func (self *Mapping) TurnOn() {
-	self.lock.Lock()
-	defer self.lock.Unlock()
-	self.isOn = true
+func (self *ProxyHandler) TurnOn() bool {
+	self.mapping.TurnOn()
+	return true
 }
-func (self *Mapping) TurnOff() {
-	self.lock.Lock()
-	defer self.lock.Unlock()
-	self.isOn = false
-}
-
-func (self *Mapping) IsOn() bool {
-	self.lock.RLock()
-	defer self.lock.RUnlock()
-	return self.isOn
+func (self *ProxyHandler) TurnOff() bool {
+	self.mapping.TurnOff()
+	return true
 }

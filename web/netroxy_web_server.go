@@ -22,59 +22,50 @@
  * SOFTWARE.
  */
 
-package server
+package web
 
 import (
-	"io"
-	"net"
-	"strconv"
+	"net/http"
 	"sync"
 
-	"github.com/123hurray/netroxy/common"
-	"github.com/123hurray/netroxy/utils/logger"
 	"github.com/123hurray/netroxy/utils/network"
 )
 
-type ProxyHandler struct {
-	tcpServer network.TCPServer
-	mainConn  net.Conn
-	connChan  chan net.Conn
-	mapping   *common.Mapping
-	lock      sync.RWMutex
-}
-
-func NewProxyHandler(mainConn net.Conn, tcpServer network.TCPServer, mapping *common.Mapping) *ProxyHandler {
-	self := new(ProxyHandler)
-	self.connChan = make(chan net.Conn)
-	self.tcpServer = tcpServer
-	self.mainConn = mainConn
-	self.mapping = mapping
-	return self
-}
-
-func (self *ProxyHandler) Handle(conn net.Conn) {
-	logger.Info("New user request", conn.LocalAddr(), "from", conn.RemoteAddr())
-	self.lock.RLock()
-	if self.mapping.IsOn() == false {
-		self.lock.RUnlock()
-		logger.Info("Reject connection.")
-		conn.Close()
-		return
+type WebConfig struct {
+	Enabled bool   `json:"enabled"`
+	Ip      string `json:"ip"`
+	Port    int    `json:"port"`
+	Root    string `json:"root"`
+	Https   struct {
+		Ca  string `json:"ca"`
+		Key string `json:"key"`
 	}
-	self.lock.RUnlock()
-	self.mainConn.Write([]byte("TRQ\n" + strconv.Itoa(self.mapping.RemotePort) + "\n"))
-	conn1 := <-self.connChan
-	logger.Info("Forwarding tcp data...")
-	go func() {
-		io.Copy(conn1, conn)
-		conn1.Close()
-		logger.Debug("Proxy conn1 closed.")
-	}()
-	io.Copy(conn, conn1)
-	conn.Close()
-	logger.Debug("Proxy conn2 closed.")
+}
+type NetroxyWebServer struct {
+	serverModels []ServerModel
+	server       *network.WebServer
+	lock         sync.RWMutex
 }
 
-func (self *ProxyHandler) Free() {
-	self.tcpServer.Close()
+func NewNetroxyWebServer(serverModels []ServerModel, conf *WebConfig) *NetroxyWebServer {
+	self := NetroxyWebServer{}
+	self.serverModels = serverModels
+	self.server = network.NewWebServer(conf.Ip, conf.Port, conf.Root)
+	return &self
+}
+
+func (self *NetroxyWebServer) Serve() {
+	handlers := map[string]http.Handler{
+		"/server/":   ServerHandler{self},
+		"/servers/":  ServersHandler{self},
+		"/client/":   ClientHandler{self},
+		"/clients/":  ClientsHandler{self},
+		"/mapping/":  MappingHandler{self},
+		"/mappings/": MappingsHandler{self},
+	}
+	self.server.Serve(handlers)
+}
+
+func (self *NetroxyWebServer) GetFile(dir string) string {
+	return self.server.Root + dir
 }

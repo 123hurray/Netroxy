@@ -22,59 +22,36 @@
  * SOFTWARE.
  */
 
-package server
+package web
 
 import (
-	"io"
-	"net"
-	"strconv"
-	"sync"
+	"html/template"
+	"net/http"
 
-	"github.com/123hurray/netroxy/common"
 	"github.com/123hurray/netroxy/utils/logger"
-	"github.com/123hurray/netroxy/utils/network"
 )
 
-type ProxyHandler struct {
-	tcpServer network.TCPServer
-	mainConn  net.Conn
-	connChan  chan net.Conn
-	mapping   *common.Mapping
-	lock      sync.RWMutex
+type MappingsHandler struct {
+	webServer *NetroxyWebServer
 }
 
-func NewProxyHandler(mainConn net.Conn, tcpServer network.TCPServer, mapping *common.Mapping) *ProxyHandler {
-	self := new(ProxyHandler)
-	self.connChan = make(chan net.Conn)
-	self.tcpServer = tcpServer
-	self.mainConn = mainConn
-	self.mapping = mapping
-	return self
-}
-
-func (self *ProxyHandler) Handle(conn net.Conn) {
-	logger.Info("New user request", conn.LocalAddr(), "from", conn.RemoteAddr())
-	self.lock.RLock()
-	if self.mapping.IsOn() == false {
-		self.lock.RUnlock()
-		logger.Info("Reject connection.")
-		conn.Close()
+func (self MappingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	webServer := self.webServer
+	webServer.lock.RLock()
+	var mappings []MappingModel
+	for _, i := range webServer.serverModels {
+		mappings = append(mappings, i.GetMappings()...)
+	}
+	webServer.lock.RUnlock()
+	t := template.New("mappings.html")
+	_, err := t.ParseFiles(self.webServer.GetFile("templates/mappings.html"), self.webServer.GetFile("templates/header.html"), self.webServer.GetFile("templates/mappings_table.html"))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	self.lock.RUnlock()
-	self.mainConn.Write([]byte("TRQ\n" + strconv.Itoa(self.mapping.RemotePort) + "\n"))
-	conn1 := <-self.connChan
-	logger.Info("Forwarding tcp data...")
-	go func() {
-		io.Copy(conn1, conn)
-		conn1.Close()
-		logger.Debug("Proxy conn1 closed.")
-	}()
-	io.Copy(conn, conn1)
-	conn.Close()
-	logger.Debug("Proxy conn2 closed.")
-}
-
-func (self *ProxyHandler) Free() {
-	self.tcpServer.Close()
+	err = t.Execute(w, mappings)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		logger.Error(err)
+	}
 }

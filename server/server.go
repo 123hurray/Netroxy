@@ -28,6 +28,7 @@ import (
 	"bufio"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/123hurray/netroxy/common"
@@ -41,23 +42,42 @@ import (
 const defaultBufferSize = 16 * 1024
 
 type Server struct {
-	config  *ServerConfig
-	clients map[string]*ClientConn
+	config           *ServerConfig
+	clients          map[string]*ClientConn
+	clientsNameMap   map[string]*ClientConn
+	clientsLock      sync.RWMutex
+	turnMappingOffCh chan int
+	turnMappingOnCh  chan int
+	responseCh       chan bool
+	name             string
+	isTLS            bool
+	startupTime      string
 }
 
-func NewServer(config *ServerConfig) *Server {
+func NewServer(config *ServerConfig, name string, isTLS bool) *Server {
 	handler := new(Server)
 	handler.clients = make(map[string]*ClientConn)
+	handler.clientsNameMap = make(map[string]*ClientConn)
+	handler.turnMappingOnCh = make(chan int)
+	handler.turnMappingOffCh = make(chan int)
+	handler.responseCh = make(chan bool)
 	handler.config = config
+	handler.name = name
+	handler.isTLS = isTLS
+	handler.startupTime = time.Now().Format("01-02 15:04:05")
 	return handler
 }
 
 func (self *Server) Supervise() {
 	now := time.Now()
+	self.clientsLock.RLock()
+	defer self.clientsLock.RUnlock()
 	for _, cli := range self.clients {
+		cli.clientLock.RLock()
 		if now.Sub(cli.expireTime) > time.Duration(0) {
 			cli.conn.Close()
 		}
+		cli.clientLock.RUnlock()
 	}
 }
 
@@ -79,7 +99,10 @@ func (self *Server) Handle(conn net.Conn) {
 		if token == "" {
 			return
 		}
+		self.clientsLock.Lock()
 		delete(self.clients, token)
+		delete(self.clientsNameMap, client.name)
+		self.clientsLock.Unlock()
 		if client.handlers == nil {
 			return
 		}
@@ -117,7 +140,10 @@ func (self *Server) Handle(conn net.Conn) {
 				// Auth passed
 				token = security.GenerateUID(16)
 				client = NewClientConn(conn, name, token, self.config.Timeout)
+				self.clientsLock.Lock()
+				self.clientsNameMap[name] = client
 				self.clients[token] = client
+				self.clientsLock.Unlock()
 				conn.Write([]byte("ARS\ntrue\n" + strconv.Itoa(self.config.Timeout) + "\n" + token + "\n"))
 				logger.Debug("Client", name, "Auth OK.")
 			} else {
@@ -130,7 +156,9 @@ func (self *Server) Handle(conn net.Conn) {
 				logger.Warn("Token not found.")
 				return
 			}
+			client.clientLock.Lock()
 			client.UpdateExpireTime()
+			client.clientLock.Unlock()
 			conn.Write([]byte("SRS\n"))
 		case line == "MAP":
 			if token == "" {
@@ -165,6 +193,8 @@ func (self *Server) Handle(conn net.Conn) {
 			client.AddHandler(handlerProxy)
 			go s.Serve(handlerProxy)
 			logger.Info("New connection " + strconv.Itoa(port) + " prepared.")
+			client.clientLock.Lock()
+			client.clientLock.Unlock()
 			conn.Write([]byte("MRS\n" + strconv.Itoa(port) + "\ntrue\n"))
 
 		case line == "TRS":
@@ -178,7 +208,9 @@ func (self *Server) Handle(conn net.Conn) {
 				logger.Warn("Illegal argument.", err)
 				return
 			}
+			self.clientsLock.RLock()
 			client := self.clients[newToken]
+			self.clientsLock.RUnlock()
 			if client == nil {
 				logger.Warn("Client not found.")
 				return

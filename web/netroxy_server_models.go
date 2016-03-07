@@ -22,46 +22,32 @@
  * SOFTWARE.
  */
 
-package common
+package web
 
-import (
-	"strconv"
-	"sync"
-)
-
-type Mapping struct {
-	Ip         string
-	Port       int
-	RemotePort int
-	isOn       bool
-	lock       sync.RWMutex
+type ServerModel interface {
+	GetClients() []ClientModel
+	GetClient(string) ClientModel
+	GetMappings() []MappingModel
+	GetMapping(int) MappingModel
+	TurnMappingOn(int) bool
+	TurnMappingOff(int) bool
+	GetName() string
+	IsTLS() bool
+	GetClientNumber() int
+	GetMappingNumber() int
 }
 
-func NewMapping(ip string, port int, remotePort int, isOn bool) *Mapping {
-	mapping := Mapping{}
-	mapping.Ip = ip
-	mapping.Port = port
-	mapping.RemotePort = remotePort
-	mapping.isOn = isOn
-	return &mapping
+type ClientModel interface {
+	RemoveHandler(key int)
+	GetName() string
+	GetLoginTime() string
+	GetMappingNumber() int
 }
 
-func (self *Mapping) Addr() string {
-	return self.Ip + ":" + strconv.Itoa(self.Port)
-}
-func (self *Mapping) TurnOn() {
-	self.lock.Lock()
-	defer self.lock.Unlock()
-	self.isOn = true
-}
-func (self *Mapping) TurnOff() {
-	self.lock.Lock()
-	defer self.lock.Unlock()
-	self.isOn = false
-}
-
-func (self *Mapping) IsOn() bool {
-	self.lock.RLock()
-	defer self.lock.RUnlock()
-	return self.isOn
+type MappingModel interface {
+	GetAddr() string
+	GetRemotePort() int
+	IsOn() bool
+	TurnOn() bool
+	TurnOff() bool
 }

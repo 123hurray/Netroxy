@@ -22,46 +22,31 @@
  * SOFTWARE.
  */
 
-package common
+package network
 
 import (
+	"net"
+	"net/http"
 	"strconv"
-	"sync"
 )
 
-type Mapping struct {
-	Ip         string
-	Port       int
-	RemotePort int
-	isOn       bool
-	lock       sync.RWMutex
+type WebServer struct {
+	ip    string
+	port  int
+	Root  string
+	https bool
+	ca    string
+	key   string
 }
 
-func NewMapping(ip string, port int, remotePort int, isOn bool) *Mapping {
-	mapping := Mapping{}
-	mapping.Ip = ip
-	mapping.Port = port
-	mapping.RemotePort = remotePort
-	mapping.isOn = isOn
-	return &mapping
+func NewWebServer(ip string, port int, root string) *WebServer {
+	return &WebServer{ip, port, root, false, "", ""}
 }
 
-func (self *Mapping) Addr() string {
-	return self.Ip + ":" + strconv.Itoa(self.Port)
-}
-func (self *Mapping) TurnOn() {
-	self.lock.Lock()
-	defer self.lock.Unlock()
-	self.isOn = true
-}
-func (self *Mapping) TurnOff() {
-	self.lock.Lock()
-	defer self.lock.Unlock()
-	self.isOn = false
-}
-
-func (self *Mapping) IsOn() bool {
-	self.lock.RLock()
-	defer self.lock.RUnlock()
-	return self.isOn
+func (self *WebServer) Serve(handlers map[string]http.Handler) {
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(self.Root+"static/HTML/"))))
+	for path, handler := range handlers {
+		http.Handle(path, handler)
+	}
+	http.ListenAndServe(net.JoinHostPort(self.ip, strconv.Itoa(self.port)), nil)
 }

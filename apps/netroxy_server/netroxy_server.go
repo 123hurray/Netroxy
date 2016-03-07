@@ -32,6 +32,8 @@ import (
 	"github.com/123hurray/netroxy/server"
 	"github.com/123hurray/netroxy/utils/logger"
 	"github.com/123hurray/netroxy/utils/network"
+	"github.com/123hurray/netroxy/utils/security"
+	"github.com/123hurray/netroxy/web"
 )
 
 func main() {
@@ -45,7 +47,7 @@ func main() {
 	if err != nil {
 		logger.Fatal(err)
 	}
-	plainNetroxyServer := server.NewServer(conf)
+	plainNetroxyServer := server.NewServer(conf, "PlainServer-"+security.GenerateUID(8), false)
 	go func() {
 		ticker := time.NewTicker(time.Duration(conf.Timeout/3) * time.Second)
 		for {
@@ -59,7 +61,7 @@ func main() {
 	if err != nil {
 		logger.Fatal(err)
 	}
-	tlsNetroxyServer := server.NewServer(conf)
+	tlsNetroxyServer := server.NewServer(conf, "TLSServer-"+security.GenerateUID(8), true)
 	go func() {
 		ticker := time.NewTicker(time.Duration(conf.Timeout/3) * time.Second)
 		for {
@@ -69,14 +71,21 @@ func main() {
 			}
 		}
 	}()
+	webServer := web.NewNetroxyWebServer([]web.ServerModel{tlsNetroxyServer, plainNetroxyServer}, &conf.Web)
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
+		go tlsNetroxyServer.WebDemon()
 		tlsServer.Serve(tlsNetroxyServer)
 		wg.Done()
 	}()
 	go func() {
+		go plainNetroxyServer.WebDemon()
 		plainServer.Serve(plainNetroxyServer)
+		wg.Done()
+	}()
+	go func() {
+		webServer.Serve()
 		wg.Done()
 	}()
 	wg.Wait()

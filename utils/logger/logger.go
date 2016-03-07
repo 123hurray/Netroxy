@@ -29,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"time"
 )
 
@@ -96,6 +97,7 @@ func Fatal(v ...interface{}) {
 			if logFd != nil {
 				logFd.WriteString(msg)
 			}
+			debug.PrintStack()
 			os.Exit(1)
 		}
 	}

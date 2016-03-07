@@ -42,7 +42,7 @@ Modify `server_config.json` and run `netroxy_server`.
 
 ### Client
 
-Modify `client_config.json` and run `netroxy_client.
+Modify `client_config.json` and run `netroxy_client`.
 
 # Internals
 

@@ -32,6 +32,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -44,16 +45,17 @@ const defaultBufferSize = 16 * 1024
 
 type Client struct {
 	common.ProtocolReader
-	conn       net.Conn
-	targets    map[int]*common.Mapping
-	ip         string
-	port       int
-	config     *ClientConfig
-	exitChan   chan bool
-	expireTime int32
-	timeout    int
-	name       string
-	token      string
+	conn        net.Conn
+	targets     map[int]*common.Mapping
+	mappingLock sync.RWMutex
+	ip          string
+	port        int
+	config      *ClientConfig
+	exitChan    chan bool
+	expireTime  int32
+	timeout     int
+	name        string
+	token       string
 }
 
 func NewClient(config *ClientConfig) *Client {
@@ -178,7 +180,9 @@ func (self *Client) handle() {
 				logger.Warn("Illegal parament.", err)
 				return
 			}
+			self.mappingLock.RLock()
 			t := self.targets[remotePort]
+			self.mappingLock.RUnlock()
 			if t != nil {
 
 				if isOk == false {
@@ -195,7 +199,9 @@ func (self *Client) handle() {
 				logger.Warn("Illegal parament.", err)
 				return
 			}
+			self.mappingLock.RLock()
 			t := self.targets[remotePort]
+			self.mappingLock.RUnlock()
 			if t != nil {
 				logger.Info("New tunnel", self.ip+":"+strconv.Itoa(remotePort), "<->", t.Addr(), "Establishing...")
 				var conn1 net.Conn
@@ -243,6 +249,8 @@ func (self *Client) Connect(mapConfig *ConnectionConfig) (*common.Mapping, error
 	t := common.NewMapping(mapConfig.Ip, mapConfig.Port, mapConfig.RemotePort, mapConfig.IsOpen)
 	logger.Info("Send new mapping", addr, ":", t.Addr(), "request...")
 	self.mapRequest(mapConfig.RemotePort, addr, mapConfig.IsOpen)
+	self.mappingLock.Lock()
 	self.targets[mapConfig.RemotePort] = t
+	self.mappingLock.Unlock()
 	return t, nil
 }

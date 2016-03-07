@@ -24,16 +24,21 @@
 
 package server
 
+import (
+	"github.com/123hurray/netroxy/web"
+)
+
 type ServerConfig struct {
-	Ip   string `json:"ip"`
-	Port int    `json:"port"`
-	TLS  struct {
+	Ip       string `json:"ip"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Timeout  int    `json:"timeout"`
+	TLS      struct {
 		Enabled bool   `json:"enabled"`
 		Port    int    `json:"port"`
 		Ca      string `json:"ca"`
 		Key     string `json:"key"`
 	} `json:"tls"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Timeout  int    `json:"timeout"`
+	Web web.WebConfig `json:"web"`
 }
