@@ -35,6 +35,7 @@ type ServerModel interface {
 	IsTLS() bool
 	GetClientNumber() int
 	GetMappingNumber() int
+	GetStartupTime() string
 }
 
 type ClientModel interface {

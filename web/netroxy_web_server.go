@@ -37,8 +37,9 @@ type WebConfig struct {
 	Port    int    `json:"port"`
 	Root    string `json:"root"`
 	Https   struct {
-		Ca  string `json:"ca"`
-		Key string `json:"key"`
+		Enabled bool   `json:"enabled"`
+		Ca      string `json:"ca"`
+		Key     string `json:"key"`
 	}
 }
 type NetroxyWebServer struct {
@@ -50,7 +51,11 @@ type NetroxyWebServer struct {
 func NewNetroxyWebServer(serverModels []ServerModel, conf *WebConfig) *NetroxyWebServer {
 	self := NetroxyWebServer{}
 	self.serverModels = serverModels
-	self.server = network.NewWebServer(conf.Ip, conf.Port, conf.Root)
+	if conf.Https.Enabled {
+		self.server = network.NewWebServer(conf.Ip, conf.Port, conf.Root, true, conf.Https.Ca, conf.Https.Key)
+	} else {
+		self.server = network.NewWebServer(conf.Ip, conf.Port, conf.Root, false, "", "")
+	}
 	return &self
 }
 

@@ -39,14 +39,19 @@ type WebServer struct {
 	key   string
 }
 
-func NewWebServer(ip string, port int, root string) *WebServer {
-	return &WebServer{ip, port, root, false, "", ""}
+func NewWebServer(ip string, port int, root string, https bool, ca string, key string) *WebServer {
+	return &WebServer{ip, port, root, https, ca, key}
 }
 
 func (self *WebServer) Serve(handlers map[string]http.Handler) {
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(self.Root+"static/HTML/"))))
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(self.Root+"static/"))))
 	for path, handler := range handlers {
 		http.Handle(path, handler)
 	}
-	http.ListenAndServe(net.JoinHostPort(self.ip, strconv.Itoa(self.port)), nil)
+	addr := net.JoinHostPort(self.ip, strconv.Itoa(self.port))
+	if self.https == true {
+		http.ListenAndServeTLS(addr, self.ca, self.key, nil)
+	} else {
+		http.ListenAndServe(addr, nil)
+	}
 }
